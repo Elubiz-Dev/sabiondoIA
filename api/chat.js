@@ -1,29 +1,18 @@
 import dotenv from 'dotenv';
-import express from 'express';
-import cors from 'cors';
 import OpenAI from 'openai';
 
 dotenv.config();
 
-const app = express();
-const PORT = process.env.BACKEND_PORT || process.env.PORT || 3001;
+export const config = { maxDuration: 30 };
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
 
-// Status check
-app.get('/api/status', (req, res) => {
-  const apiKey = process.env.GROQ_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY;
-  const hasServerKey = Boolean(apiKey && apiKey.trim().length > 5);
-  res.json({
-    status: 'ok',
-    hasServerKey,
-    defaultModel: process.env.DEFAULT_MODEL || 'llama-3.3-70b-versatile'
-  });
-});
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-// Chat endpoint — SSE streaming for local dev
-app.post('/api/chat', async (req, res) => {
   const { messages, temperature = 0.7 } = req.body;
 
   const clientKey = req.headers['x-api-key'];
@@ -32,7 +21,7 @@ app.post('/api/chat', async (req, res) => {
 
   if (!apiKey || apiKey.length < 5) {
     return res.status(401).json({
-      error: 'Por favor ingresa tu API Key en Ajustes ⚙️ (Groq, Google Gemini o OpenRouter).'
+      error: 'Por favor ingresa tu API Key en Ajustes ⚙️'
     });
   }
 
@@ -54,46 +43,30 @@ app.post('/api/chat', async (req, res) => {
     model = 'gpt-4o-mini';
   }
 
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-
   try {
     const openai = new OpenAI({
       apiKey,
       baseURL,
       defaultHeaders: apiKey.startsWith('sk-or-') ? {
-        'HTTP-Referer': 'http://localhost:3000',
+        'HTTP-Referer': 'https://sabiondoia.vercel.app',
         'X-Title': 'Sabiondo AI'
       } : {}
     });
 
-    const stream = await openai.chat.completions.create({
+    // Non-streaming response for Vercel serverless compatibility
+    const completion = await openai.chat.completions.create({
       model,
       messages,
       temperature: Number(temperature),
-      stream: true
+      stream: false
     });
 
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
-      }
-    }
+    const content = completion.choices[0]?.message?.content || '';
+    return res.status(200).json({ content });
 
-    res.write(`data: [DONE]\n\n`);
-    res.end();
   } catch (error) {
     console.error('Error en API:', error);
     const errorMessage = error?.error?.message || error.message || 'Error al comunicarse con la IA.';
-    res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
-    res.end();
+    return res.status(500).json({ error: errorMessage });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`📡 Backend API de Sabiondo AI activo en http://localhost:${PORT}`);
-});
-
-export default app;
+}

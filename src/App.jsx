@@ -135,7 +135,7 @@ export default function App() {
     });
   };
 
-  // Send Message with SSE streaming
+  // Send Message — detecta Vercel vs local y usa JSON o SSE
   const handleSendMessage = async () => {
     const text = userInput.trim();
     if (!text || isGenerating) return;
@@ -150,64 +150,78 @@ export default function App() {
 
     let fullAssistantText = '';
 
+    // Detectar si estamos en Vercel (no es localhost)
+    const isVercel = !window.location.hostname.includes('localhost');
+
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (apiKey) headers['x-api-key'] = apiKey;
 
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          messages: [{ role: 'system', content: systemPrompt }, ...newMessages],
-          temperature
-        })
+      const body = JSON.stringify({
+        messages: [{ role: 'system', content: systemPrompt }, ...newMessages],
+        temperature
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        if (res.status === 401 && (!apiKey || apiKey.length < 5)) {
-          // Demo fallback
-          fullAssistantText = `### 🦉 ¡Hola! Soy Sabiondo AI\n*Creado por Daniela Romero y Mayra Barrios*\n\nHe recibido tu consulta sobre: **"${text}"**.\n\nPara activar respuestas en tiempo real:\n1. Abre **Ajustes ⚙️** en el menú.\n2. Pega tu clave gratuita de [Groq Console](https://console.groq.com/keys) o [Google AI Studio](https://aistudio.google.com/app/apikey).`;
-          const finalMessages = [...newMessages, { role: 'assistant', content: fullAssistantText }];
-          setMessages(finalMessages);
-          saveChatHistory(finalMessages);
-          setIsGenerating(false);
-          return;
+      if (isVercel) {
+        // ── Vercel: endpoint JSON sin streaming ──────────────────────────
+        const res = await fetch('/api/chat', { method: 'POST', headers, body });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          if (res.status === 401 && (!apiKey || apiKey.length < 5)) {
+            fullAssistantText = `### 🦉 ¡Hola! Soy Sabiondo AI\n*Creado por Daniela Romero y Mayra Barrios*\n\nPara activar respuestas:\n1. Abre **Ajustes ⚙️** en el menú.\n2. Pega tu clave de [Groq Console](https://console.groq.com/keys) o [Google AI Studio](https://aistudio.google.com/app/apikey).`;
+            setMessages([...newMessages, { role: 'assistant', content: fullAssistantText }]);
+            saveChatHistory([...newMessages, { role: 'assistant', content: fullAssistantText }]);
+            setIsGenerating(false);
+            return;
+          }
+          throw new Error(err.error || `Error ${res.status}`);
         }
-        throw new Error(err.error || `Error ${res.status}`);
-      }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        fullAssistantText = data.content || '';
 
-      // Create placeholder assistant message
-      setMessages([...newMessages, { role: 'assistant', content: '' }]);
+      } else {
+        // ── Local: SSE streaming ─────────────────────────────────────────
+        const res = await fetch('/api/chat', { method: 'POST', headers, body });
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          if (res.status === 401 && (!apiKey || apiKey.length < 5)) {
+            fullAssistantText = `### 🦉 ¡Hola! Soy Sabiondo AI\n*Creado por Daniela Romero y Mayra Barrios*\n\nPara activar respuestas:\n1. Abre **Ajustes ⚙️** en el menú.\n2. Pega tu clave de [Groq Console](https://console.groq.com/keys) o [Google AI Studio](https://aistudio.google.com/app/apikey).`;
+            setMessages([...newMessages, { role: 'assistant', content: fullAssistantText }]);
+            saveChatHistory([...newMessages, { role: 'assistant', content: fullAssistantText }]);
+            setIsGenerating(false);
+            return;
+          }
+          throw new Error(err.error || `Error ${res.status}`);
+        }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        setMessages([...newMessages, { role: 'assistant', content: '' }]);
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          const dataStr = trimmed.replace(/^data: /, '');
-
-          if (dataStr === '[DONE]') break;
-
-          try {
-            const parsed = JSON.parse(dataStr);
-            if (parsed.error) throw new Error(parsed.error);
-            if (parsed.content) {
-              fullAssistantText += parsed.content;
-              setMessages([...newMessages, { role: 'assistant', content: fullAssistantText }]);
-            }
-          } catch (e) {
-            console.error(e);
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            const dataStr = trimmed.replace(/^data: /, '');
+            if (dataStr === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.error) throw new Error(parsed.error);
+              if (parsed.content) {
+                fullAssistantText += parsed.content;
+                setMessages([...newMessages, { role: 'assistant', content: fullAssistantText }]);
+              }
+            } catch (e) { console.error(e); }
           }
         }
       }
@@ -215,7 +229,6 @@ export default function App() {
       const finalMessages = [...newMessages, { role: 'assistant', content: fullAssistantText }];
       setMessages(finalMessages);
       saveChatHistory(finalMessages);
-
       if (autoVoice) speakText(fullAssistantText);
       if (activeMode === 'quiz') confetti({ particleCount: 75, spread: 70, origin: { y: 0.6 } });
 
