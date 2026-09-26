@@ -129,7 +129,7 @@ export function Sidebar({
             <Sparkles size={16} color="#818CF8" />
             <div className="authors-info">
               <span className="authors-label">Proyecto desarrollado por:</span>
-              <strong className="authors-names">Daniela Romero & Mayra Queso</strong>
+              <strong className="authors-names">Daniela Romero & Mayra Barrios</strong>
             </div>
           </div>
 

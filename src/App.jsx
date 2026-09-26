@@ -25,7 +25,6 @@ export default function App() {
 
   // Settings State
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('sabiondo_api_key') || '');
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('sabiondo_model') || 'llama-3.3-70b-versatile');
   const [temperature, setTemperature] = useState(() => parseFloat(localStorage.getItem('sabiondo_temp') || '0.7'));
   const [autoVoice, setAutoVoice] = useState(() => localStorage.getItem('sabiondo_auto_voice') === 'true');
 
@@ -160,8 +159,7 @@ export default function App() {
         headers,
         body: JSON.stringify({
           messages: [{ role: 'system', content: systemPrompt }, ...newMessages],
-          temperature,
-          model: selectedModel
+          temperature
         })
       });
 
@@ -169,7 +167,7 @@ export default function App() {
         const err = await res.json().catch(() => ({}));
         if (res.status === 401 && (!apiKey || apiKey.length < 5)) {
           // Demo fallback
-          fullAssistantText = `### 🦉 ¡Hola! Soy Sabiondo AI\n*Creado por Daniela Romero y Mayra Queso*\n\nHe recibido tu consulta sobre: **"${text}"**.\n\nPara activar las respuestas en tiempo real con **Groq**, **Google Gemini** o **OpenRouter**:\n1. Abre **Ajustes & Conexión ⚙️** en el menú.\n2. Pega tu clave gratuita de [Groq Console](https://console.groq.com/keys) o [Google AI Studio](https://aistudio.google.com/app/apikey).\n\n*¡Mientras tanto, puedes usar el Pomodoro, las Flashcards 3D y el Bloc de Notas!*`;
+          fullAssistantText = `### 🦉 ¡Hola! Soy Sabiondo AI\n*Creado por Daniela Romero y Mayra Barrios*\n\nHe recibido tu consulta sobre: **"${text}"**.\n\nPara activar respuestas en tiempo real:\n1. Abre **Ajustes ⚙️** en el menú.\n2. Pega tu clave gratuita de [Groq Console](https://console.groq.com/keys) o [Google AI Studio](https://aistudio.google.com/app/apikey).`;
           const finalMessages = [...newMessages, { role: 'assistant', content: fullAssistantText }];
           setMessages(finalMessages);
           saveChatHistory(finalMessages);
@@ -274,7 +272,7 @@ export default function App() {
       showToast('No hay apuntes para exportar', 'error');
       return;
     }
-    let md = `# Apuntes de Estudio — Sabiondo AI\n*Hecho por Daniela Romero y Mayra Queso*\n\n`;
+    let md = `# Apuntes de Estudio — Sabiondo AI\n*Hecho por Daniela Romero y Mayra Barrios*\n\n`;
     md += `* **Fecha:** ${new Date().toLocaleString()}\n\n---\n\n`;
     messages.forEach((m) => {
       md += `### ${m.role === 'user' ? 'Estudiante' : 'Sabiondo AI'}:\n${m.content}\n\n`;
@@ -290,12 +288,10 @@ export default function App() {
   };
 
   // Save Settings
-  const handleSaveSettings = (newKey, newModel, newTemp, newAutoVoice) => {
+  const handleSaveSettings = (newKey, newTemp, newAutoVoice) => {
     localStorage.setItem('sabiondo_api_key', newKey);
-    localStorage.setItem('sabiondo_model', newModel);
     localStorage.setItem('sabiondo_temp', newTemp.toString());
     localStorage.setItem('sabiondo_auto_voice', newAutoVoice.toString());
-    setSelectedModel(newModel);
     setIsOnline(Boolean(newKey && newKey.length > 5));
     showToast('Ajustes guardados con éxito', 'success');
   };
@@ -377,8 +373,6 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         apiKey={apiKey}
         setApiKey={setApiKey}
-        selectedModel={selectedModel}
-        setSelectedModel={setSelectedModel}
         temperature={temperature}
         setTemperature={setTemperature}
         autoVoice={autoVoice}

@@ -63,7 +63,7 @@ export function ChatArea({
           </div>
           <div className="header-authors-tag">
             <Sparkles size={14} color="#818CF8" />
-            <span>Hecho por <strong>Daniela Romero & Mayra Queso</strong></span>
+            <span>Hecho por <strong>Daniela Romero & Mayra Barrios</strong></span>
           </div>
         </div>
 
@@ -92,7 +92,7 @@ export function ChatArea({
               Aprende más rápido con <span className="gradient-text">Sabiondo AI</span>
             </h2>
             <p className="hero-subtitle">
-              Resuelve dudas complejas, domina fórmulas con LaTeX, practica con quizzes interactivos y redacta con apoyo pedagógico.
+              Tu tutor inteligente para resolver dudas, repasar ejercicios y aprender mejor.
             </p>
 
             {/* Materias */}
@@ -235,7 +235,7 @@ export function ChatArea({
         </form>
 
         <div className="input-footer-info">
-          🦉 Sabiondo AI — Hecho por <strong>Daniela Romero & Mayra Queso</strong>. Presiona <strong>Enter</strong> para enviar.
+          🦉 Sabiondo AI — Hecho por <strong>Daniela Romero & Mayra Barrios</strong>. Presiona <strong>Enter</strong> para enviar.
         </div>
       </div>
     </main>
