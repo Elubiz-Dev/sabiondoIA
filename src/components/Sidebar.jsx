@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Clock, Layers, FileText, Settings, Trash2, X, Sparkles } from 'lucide-react';
+import { Plus, Clock, Layers, FileText, Settings, Trash2, X, Sparkles, MessageSquare } from 'lucide-react';
 import { ACADEMIC_MODES } from '../constants/modes';
 
 export function Sidebar({
@@ -61,7 +61,7 @@ export function Sidebar({
         {/* Academic Modes */}
         <div className="sidebar-section">
           <div className="section-header-row">
-            <h3 className="section-label">Modo Pedagógico</h3>
+            <h3 className="section-label">Modo de Aprendizaje</h3>
           </div>
           <div className="mode-pills-list">
             {ACADEMIC_MODES.map((mode) => (
@@ -86,7 +86,7 @@ export function Sidebar({
         {/* Chat History */}
         <div className="sidebar-section chat-history-section">
           <div className="section-header-row">
-            <h3 className="section-label">Historial de Estudio</h3>
+            <h3 className="section-label">Consultas Recientes</h3>
             {chats.length > 0 && (
               <button className="clear-history-btn" onClick={onClearHistory} title="Vaciar">
                 Vaciar
@@ -95,36 +95,40 @@ export function Sidebar({
           </div>
           <div className="history-list">
             {chats.length === 0 ? (
-              <div style={{ padding: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                Sin consultas previas
+              <div style={{ padding: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Sin consultas recientes (auto-limpieza activa)
               </div>
             ) : (
-              chats.map((c) => (
-                <div
-                  key={c.id}
-                  className={`history-item ${c.id === currentChatId ? 'active' : ''}`}
-                  onClick={() => onSelectChat(c.id)}
-                >
-                  <span className="history-title">{c.title}</span>
-                  <button
-                    className="history-delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteChat(c.id);
-                    }}
-                    title="Eliminar"
+              chats.map((c) => {
+                const modeObj = ACADEMIC_MODES.find((m) => m.id === c.mode);
+                const modeIcon = modeObj?.icon || '💬';
+                return (
+                  <div
+                    key={c.id}
+                    className={`history-item ${c.id === currentChatId ? 'active' : ''}`}
+                    onClick={() => onSelectChat(c.id)}
                   >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))
+                    <span style={{ fontSize: '0.9rem', marginRight: '4px' }}>{modeIcon}</span>
+                    <span className="history-title">{c.title}</span>
+                    <button
+                      className="history-delete-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteChat(c.id);
+                      }}
+                      title="Eliminar consulta"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
 
         {/* Footer with Authors & Settings */}
         <div className="sidebar-footer">
-          {/* Créditos de Daniela Romero y Mayra Queso */}
           <div className="authors-badge">
             <Sparkles size={16} color="#818CF8" />
             <div className="authors-info">

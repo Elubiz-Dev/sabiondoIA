@@ -8,6 +8,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { ACADEMIC_MODES } from './constants/modes';
 import confetti from 'canvas-confetti';
 
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
 export default function App() {
   // Theme
   const [theme, setTheme] = useState(() => localStorage.getItem('sabiondo_theme') || 'dark');
@@ -15,7 +17,22 @@ export default function App() {
   // App State
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMode, setActiveMode] = useState('general');
-  const [chats, setChats] = useState(() => JSON.parse(localStorage.getItem('sabiondo_chats') || '[]'));
+  const [chats, setChats] = useState(() => {
+    try {
+      const raw = localStorage.getItem('sabiondo_chats');
+      const parsed = raw ? JSON.parse(raw) : [];
+      // Auto-limpieza de chats temporales de más de 12 horas
+      const now = Date.now();
+      const fresh = parsed.filter((c) => !c.updatedAt || now - c.updatedAt < TWELVE_HOURS_MS);
+      if (fresh.length !== parsed.length) {
+        localStorage.setItem('sabiondo_chats', JSON.stringify(fresh));
+      }
+      return fresh;
+    } catch {
+      return [];
+    }
+  });
+
   const [currentChatId, setCurrentChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [userInput, setUserInput] = useState('');
@@ -73,6 +90,20 @@ export default function App() {
     setMessages([]);
     setUserInput('');
     setSidebarOpen(false);
+  };
+
+  // Switch mode and automatically start a fresh chat if the current one has messages
+  const handleSelectMode = (modeId) => {
+    setActiveMode(modeId);
+    const modeName = ACADEMIC_MODES.find((x) => x.id === modeId)?.name || 'Modo';
+    if (messages.length > 0) {
+      setCurrentChatId('chat_' + Date.now());
+      setMessages([]);
+      setUserInput('');
+      showToast(`Nuevo chat: ${modeName}`);
+    } else {
+      showToast(`Modo activo: ${modeName}`);
+    }
   };
 
   const handleSelectChat = (chatId) => {
@@ -149,8 +180,6 @@ export default function App() {
     const systemPrompt = modeObj.systemPrompt;
 
     let fullAssistantText = '';
-
-    // Detectar si estamos en Vercel (no es localhost)
     const isVercel = !window.location.hostname.includes('localhost');
 
     try {
@@ -163,7 +192,7 @@ export default function App() {
       });
 
       if (isVercel) {
-        // ── Vercel: endpoint JSON sin streaming ──────────────────────────
+        // Vercel Serverless Function
         const res = await fetch('/api/chat', { method: 'POST', headers, body });
 
         if (!res.ok) {
@@ -183,7 +212,7 @@ export default function App() {
         fullAssistantText = data.content || '';
 
       } else {
-        // ── Local: SSE streaming ─────────────────────────────────────────
+        // Local streaming
         const res = await fetch('/api/chat', { method: 'POST', headers, body });
 
         if (!res.ok) {
@@ -318,10 +347,7 @@ export default function App() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         activeMode={activeMode}
-        onSelectMode={(m) => {
-          setActiveMode(m);
-          showToast(`Modo activo: ${ACADEMIC_MODES.find((x) => x.id === m)?.name}`);
-        }}
+        onSelectMode={handleSelectMode}
         onNewChat={handleNewChat}
         chats={chats}
         currentChatId={currentChatId}
@@ -369,7 +395,7 @@ export default function App() {
         setNotes={setNotes}
         onSaveNotes={() => {
           localStorage.setItem('sabiondo_notes', notes);
-          showToast('Notas guardadas', 'success');
+          showToast('Notas guardadas con éxito', 'success');
         }}
         onSummarizeNotes={() => {
           if (!notes.trim()) {
@@ -377,7 +403,7 @@ export default function App() {
             return;
           }
           setIsNotesOpen(false);
-          setUserInput(`Por favor resume mis siguientes apuntes y genera 3 preguntas de repaso:\n\n"""\n${notes}\n"""`);
+          setUserInput(`Por favor resume mis siguientes apuntes y crea 3 preguntas de repaso:\n\n"""\n${notes}\n"""`);
         }}
       />
 
