@@ -8,22 +8,18 @@ export function SettingsModal({
   setApiKey,
   temperature,
   setTemperature,
-  autoVoice,
-  setAutoVoice,
   onSave
 }) {
   const [showKey, setShowKey] = useState(false);
   const [tempApiKey, setTempApiKey] = useState(apiKey);
   const [tempTemperature, setTempTemperature] = useState(temperature);
-  const [tempAutoVoice, setTempAutoVoice] = useState(autoVoice);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
     setApiKey(tempApiKey);
     setTemperature(tempTemperature);
-    setAutoVoice(tempAutoVoice);
-    onSave(tempApiKey, tempTemperature, tempAutoVoice);
+    onSave(tempApiKey, tempTemperature);
     onClose();
   };
 
@@ -104,23 +100,6 @@ export function SettingsModal({
               <span>Exacto (0.2)</span>
               <span>Balanceado (0.7)</span>
               <span>Creativo (1.0)</span>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label><strong>Síntesis de Voz</strong></label>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                Lectura automática de respuestas
-              </span>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={tempAutoVoice}
-                  onChange={(e) => setTempAutoVoice(e.target.checked)}
-                />
-                <span className="slider round"></span>
-              </label>
             </div>
           </div>
         </div>

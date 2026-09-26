@@ -43,7 +43,6 @@ export default function App() {
   // Settings State
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('sabiondo_api_key') || '');
   const [temperature, setTemperature] = useState(() => parseFloat(localStorage.getItem('sabiondo_temp') || '0.7'));
-  const [autoVoice, setAutoVoice] = useState(() => localStorage.getItem('sabiondo_auto_voice') === 'true');
 
   // Notes State
   const [notes, setNotes] = useState(() => localStorage.getItem('sabiondo_notes') || '');
@@ -166,7 +165,7 @@ export default function App() {
     });
   };
 
-  // Send Message — detecta Vercel vs local y usa JSON o SSE
+  // Send Message
   const handleSendMessage = async () => {
     const text = userInput.trim();
     if (!text || isGenerating) return;
@@ -258,7 +257,6 @@ export default function App() {
       const finalMessages = [...newMessages, { role: 'assistant', content: fullAssistantText }];
       setMessages(finalMessages);
       saveChatHistory(finalMessages);
-      if (autoVoice) speakText(fullAssistantText);
       if (activeMode === 'quiz') confetti({ particleCount: 75, spread: 70, origin: { y: 0.6 } });
 
     } catch (err) {
@@ -270,17 +268,7 @@ export default function App() {
     }
   };
 
-  // Voice output
-  const speakText = (text) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const clean = text.replace(/```[\s\S]*?```/g, 'código').replace(/[$#*_>`]/g, '').trim();
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = 'es-ES';
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // Voice input
+  // Voice input (dictation)
   const handleToggleVoice = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -330,10 +318,9 @@ export default function App() {
   };
 
   // Save Settings
-  const handleSaveSettings = (newKey, newTemp, newAutoVoice) => {
+  const handleSaveSettings = (newKey, newTemp) => {
     localStorage.setItem('sabiondo_api_key', newKey);
     localStorage.setItem('sabiondo_temp', newTemp.toString());
-    localStorage.setItem('sabiondo_auto_voice', newAutoVoice.toString());
     setIsOnline(Boolean(newKey && newKey.length > 5));
     showToast('Ajustes guardados con éxito', 'success');
   };
@@ -374,7 +361,6 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onExport={handleExport}
-        onSpeakText={speakText}
       />
 
       {/* Modals & Drawer */}
@@ -414,8 +400,6 @@ export default function App() {
         setApiKey={setApiKey}
         temperature={temperature}
         setTemperature={setTemperature}
-        autoVoice={autoVoice}
-        setAutoVoice={setAutoVoice}
         onSave={handleSaveSettings}
       />
 

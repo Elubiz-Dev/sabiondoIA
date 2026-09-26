@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Copy, Check, Volume2 } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import { marked } from 'marked';
 import katex from 'katex';
 
@@ -69,7 +69,7 @@ function formatAcademicContent(rawContent) {
   return html;
 }
 
-export function MessageBubble({ message, onSpeak }) {
+export function MessageBubble({ message }) {
   const contentRef = useRef(null);
   const [copied, setCopied] = React.useState(false);
 
@@ -105,10 +105,6 @@ export function MessageBubble({ message, onSpeak }) {
             <button className="msg-action-btn" onClick={handleCopy} title="Copiar">
               {copied ? <Check size={14} color="var(--accent-emerald)" /> : <Copy size={14} />}
               <span>{copied ? 'Copiado' : 'Copiar'}</span>
-            </button>
-            <button className="msg-action-btn" onClick={() => onSpeak(message.content)} title="Escuchar">
-              <Volume2 size={14} />
-              <span>Escuchar</span>
             </button>
           </div>
         )}

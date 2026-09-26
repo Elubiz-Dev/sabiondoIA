@@ -15,8 +15,7 @@ export function ChatArea({
   onToggleVoice,
   theme,
   onToggleTheme,
-  onExport,
-  onSpeakText
+  onExport
 }) {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -154,7 +153,7 @@ export function ChatArea({
         ) : (
           <div className="messages-list">
             {messages.map((m, i) => (
-              <MessageBubble key={i} message={m} onSpeak={onSpeakText} />
+              <MessageBubble key={i} message={m} />
             ))}
             <div ref={messagesEndRef} />
           </div>
