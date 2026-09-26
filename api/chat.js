@@ -62,7 +62,7 @@ export default async function handler(req, res) {
 
   if (apiKey.startsWith('gsk_')) {
     baseURL = 'https://api.groq.com/openai/v1';
-    model = process.env.DEFAULT_MODEL || 'llama-3.3-70b-versatile';
+    model = process.env.DEFAULT_MODEL || 'llama3-70b-8192';
   } else if (apiKey.startsWith('sk-or-')) {
     baseURL = 'https://openrouter.ai/api/v1';
     model = 'openai/gpt-oss-20b';
