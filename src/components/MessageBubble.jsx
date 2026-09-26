@@ -3,7 +3,6 @@ import { Copy, Check, Volume2 } from 'lucide-react';
 import { marked } from 'marked';
 import katex from 'katex';
 
-// Configurar marked para saltos de línea suaves
 marked.setOptions({
   gfm: true,
   breaks: true
@@ -14,56 +13,49 @@ function formatAcademicContent(rawContent) {
 
   let text = rawContent;
 
-  // 1. Limpiar símbolos y comandos LaTeX crudos fuera de contexto matemático
-  // Convertir grados como 45^\circ o 45\circ a 45°
+  // 1. Normalizar delimitadores de bloque LaTeX \[ ... \] a $$ ... $$
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, formula) => `\n\n$$${formula.trim()}$$\n\n`);
+
+  // 2. Normalizar delimitadores inline LaTeX \( ... \) a $ ... $
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, formula) => ` $${formula.trim()}$ `);
+
+  // 3. Normalizar corchetes con comandos matemáticos [ \frac ... ] o [ \sin ... ] a $$ ... $$
+  text = text.replace(/\[\s*(\\?(?:frac|sqrt|sin|cos|tan|arcsin|arccos|arctan|approx|times|cdot|Longrightarrow|rightarrow|sum|int|lim|alpha|beta|theta|gamma|delta|pi|lambda|sigma|mu|omega|phi|psi|circ|pm|neq|leq|geq|log|ln)[\s\S]*?)\s*\]/g, (_, formula) => `\n\n$$${formula.trim()}$$\n\n`);
+
+  // 4. Convertir grados como 45^\circ o 45\circ a 45°
   text = text.replace(/(\d+)\s*\^?\\circ/g, '$1°');
 
-  // Convertir delimitadores de bloque \[ ... \] o [ ... con comandos math ]
-  text = text.replace(/\\?\[\s*([\s\S]*?)\s*\\?\]/g, (match, formula) => {
-    if (/\\(frac|sqrt|sin|cos|tan|arcsin|arccos|arctan|approx|times|cdot|Longrightarrow|rightarrow|sum|int|lim|alpha|beta|theta|circ|pm|neq|leq|geq|log|ln)|[\^_]/.test(formula)) {
-      return `\n\n$$${formula.trim()}$$\n\n`;
-    }
-    return match;
-  });
+  // 5. Detectar símbolos matemáticos con barra invertida huérfanos (\theta, \alpha, \pi, etc.)
+  text = text.replace(/(?<!\$)\\(theta|alpha|beta|gamma|delta|pi|lambda|sigma|mu|omega|phi|psi|approx|times|pm|cdot|neq|leq|geq)(?!\$)/g, (_, sym) => ` $\\${sym}$ `);
 
-  // Convertir delimitadores inline \( ... \) o ( ... con comandos math )
-  text = text.replace(/\\?\(\s*([\s\S]*?)\s*\\?\)/g, (match, formula) => {
-    if (/\\(frac|sqrt|sin|cos|tan|circ|alpha|beta|theta|approx|cdot|times|pm|neq|leq|geq)|[\^_]/.test(formula)) {
-      return ` $${formula.trim()}$ `;
-    }
-    return match;
-  });
-
-  // 2. Pre-renderizar KaTeX antes de Marked para no romper caracteres especiales (_, *, \, <, >)
+  // 6. Pre-renderizar bloques KaTeX ($$ ... $$) antes de procesar Markdown
   const mathMap = [];
-
-  // Bloques de ecuaciones ($$ ... $$)
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
     const idx = mathMap.length;
     let rendered;
     try {
       rendered = katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
     } catch {
-      rendered = `<div class="katex-error">${math}</div>`;
+      rendered = `<div class="katex-rendered-block">${math}</div>`;
     }
     mathMap.push(rendered);
     return `%%KATEX_BLOCK_${idx}%%`;
   });
 
-  // Fórmulas en línea ($ ... $)
+  // 7. Pre-renderizar fórmulas en línea ($ ... $)
   text = text.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
     const idx = mathMap.length;
     let rendered;
     try {
       rendered = katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
     } catch {
-      rendered = `<span class="katex-error">${math}</span>`;
+      rendered = `<span class="katex-rendered-inline">${math}</span>`;
     }
     mathMap.push(rendered);
     return `%%KATEX_INLINE_${idx}%%`;
   });
 
-  // 3. Parsear Markdown
+  // 8. Parsear Markdown
   let html = '';
   try {
     html = marked.parse(text);
@@ -71,7 +63,7 @@ function formatAcademicContent(rawContent) {
     html = text;
   }
 
-  // 4. Restaurar fórmulas renderizadas por KaTeX
+  // 9. Restaurar fórmulas matemáticas renderizadas por KaTeX
   html = html.replace(/%%KATEX_(?:BLOCK|INLINE)_(\d+)%%/g, (_, idx) => mathMap[Number(idx)] || '');
 
   return html;
