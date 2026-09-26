@@ -3,6 +3,80 @@ import { Copy, Check, Volume2 } from 'lucide-react';
 import { marked } from 'marked';
 import katex from 'katex';
 
+// Configurar marked para saltos de línea suaves
+marked.setOptions({
+  gfm: true,
+  breaks: true
+});
+
+function formatAcademicContent(rawContent) {
+  if (!rawContent || typeof rawContent !== 'string') return '';
+
+  let text = rawContent;
+
+  // 1. Limpiar símbolos y comandos LaTeX crudos fuera de contexto matemático
+  // Convertir grados como 45^\circ o 45\circ a 45°
+  text = text.replace(/(\d+)\s*\^?\\circ/g, '$1°');
+
+  // Convertir delimitadores de bloque \[ ... \] o [ ... con comandos math ]
+  text = text.replace(/\\?\[\s*([\s\S]*?)\s*\\?\]/g, (match, formula) => {
+    if (/\\(frac|sqrt|sin|cos|tan|arcsin|arccos|arctan|approx|times|cdot|Longrightarrow|rightarrow|sum|int|lim|alpha|beta|theta|circ|pm|neq|leq|geq|log|ln)|[\^_]/.test(formula)) {
+      return `\n\n$$${formula.trim()}$$\n\n`;
+    }
+    return match;
+  });
+
+  // Convertir delimitadores inline \( ... \) o ( ... con comandos math )
+  text = text.replace(/\\?\(\s*([\s\S]*?)\s*\\?\)/g, (match, formula) => {
+    if (/\\(frac|sqrt|sin|cos|tan|circ|alpha|beta|theta|approx|cdot|times|pm|neq|leq|geq)|[\^_]/.test(formula)) {
+      return ` $${formula.trim()}$ `;
+    }
+    return match;
+  });
+
+  // 2. Pre-renderizar KaTeX antes de Marked para no romper caracteres especiales (_, *, \, <, >)
+  const mathMap = [];
+
+  // Bloques de ecuaciones ($$ ... $$)
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+    const idx = mathMap.length;
+    let rendered;
+    try {
+      rendered = katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
+    } catch {
+      rendered = `<div class="katex-error">${math}</div>`;
+    }
+    mathMap.push(rendered);
+    return `%%KATEX_BLOCK_${idx}%%`;
+  });
+
+  // Fórmulas en línea ($ ... $)
+  text = text.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
+    const idx = mathMap.length;
+    let rendered;
+    try {
+      rendered = katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
+    } catch {
+      rendered = `<span class="katex-error">${math}</span>`;
+    }
+    mathMap.push(rendered);
+    return `%%KATEX_INLINE_${idx}%%`;
+  });
+
+  // 3. Parsear Markdown
+  let html = '';
+  try {
+    html = marked.parse(text);
+  } catch {
+    html = text;
+  }
+
+  // 4. Restaurar fórmulas renderizadas por KaTeX
+  html = html.replace(/%%KATEX_(?:BLOCK|INLINE)_(\d+)%%/g, (_, idx) => mathMap[Number(idx)] || '');
+
+  return html;
+}
+
 export function MessageBubble({ message, onSpeak }) {
   const contentRef = useRef(null);
   const [copied, setCopied] = React.useState(false);
@@ -10,26 +84,7 @@ export function MessageBubble({ message, onSpeak }) {
   useEffect(() => {
     if (contentRef.current && message.content) {
       try {
-        let html = marked.parse(message.content);
-        
-        // Reemplazo simple para KaTeX $$ ... $$ y $ ... $
-        html = html.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
-          try {
-            return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
-          } catch {
-            return `$$${math}$$`;
-          }
-        });
-
-        html = html.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
-          try {
-            return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
-          } catch {
-            return `$${math}$`;
-          }
-        });
-
-        contentRef.current.innerHTML = html;
+        contentRef.current.innerHTML = formatAcademicContent(message.content);
       } catch (err) {
         contentRef.current.innerText = message.content;
       }
