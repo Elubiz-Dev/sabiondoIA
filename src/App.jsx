@@ -6,6 +6,7 @@ import { FlashcardsModal } from './components/FlashcardsModal';
 import { NotesDrawer } from './components/NotesDrawer';
 import { SettingsModal } from './components/SettingsModal';
 import { ACADEMIC_MODES } from './constants/modes';
+import { generateStyledExportHTML } from './utils/exportNotes';
 import confetti from 'canvas-confetti';
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -296,25 +297,27 @@ export default function App() {
     rec.start();
   };
 
-  // Export Chat
+  // Export Chat — Documento Estilizado con opción a PDF
   const handleExport = () => {
     if (messages.length === 0) {
-      showToast('No hay apuntes para exportar', 'error');
+      showToast('No hay apuntes para exportar en esta consulta', 'error');
       return;
     }
-    let md = `# Apuntes de Estudio — Sabiondo AI\n*Hecho por Daniela Romero y Mayra Barrios*\n\n`;
-    md += `* **Fecha:** ${new Date().toLocaleString()}\n\n---\n\n`;
-    messages.forEach((m) => {
-      md += `### ${m.role === 'user' ? 'Estudiante' : 'Sabiondo AI'}:\n${m.content}\n\n`;
+    const modeObj = ACADEMIC_MODES.find((m) => m.id === activeMode) || ACADEMIC_MODES[0];
+    const htmlContent = generateStyledExportHTML({
+      messages,
+      modeName: modeObj.name,
+      activeModeIcon: modeObj.icon
     });
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Apuntes_Sabiondo_${Date.now()}.md`;
+    a.download = `Apuntes_Sabiondo_${Date.now()}.html`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Apuntes exportados en Markdown (.md)');
+    showToast('¡Guía de estudio descargada! Ábrela para ver el diseño o guardar en PDF 📄', 'success');
   };
 
   // Save Settings
