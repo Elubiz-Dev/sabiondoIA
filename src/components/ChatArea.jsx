@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef } from 'react';
 import { Menu, Download, Moon, Sun, Mic, Send, X, Sparkles } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { ACADEMIC_MODES } from '../constants/modes';
@@ -19,35 +19,9 @@ export function ChatArea({
   onSpeakText
 }) {
   const messagesEndRef = useRef(null);
-  const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
-  const isNearBottomRef = useRef(true);
 
   const currentModeObj = ACADEMIC_MODES.find((m) => m.id === activeMode) || ACADEMIC_MODES[0];
-
-  // Track if user is near bottom
-  const handleScroll = useCallback(() => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    const threshold = 120;
-    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
-  }, []);
-
-  // Smart scroll: only auto-scroll when near bottom OR when a new user message is sent
-  useEffect(() => {
-    if (isNearBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  // Always scroll to bottom when user sends (last message is 'user')
-  useEffect(() => {
-    const last = messages[messages.length - 1];
-    if (last?.role === 'user') {
-      isNearBottomRef.current = true;
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages.length]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -101,7 +75,7 @@ export function ChatArea({
       </header>
 
       {/* Mensajes */}
-      <div className="chat-messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
+      <div className="chat-messages-container">
         {messages.length === 0 ? (
           <div className="welcome-hero">
             <div className="hero-top-badge">

@@ -28,6 +28,14 @@ const validateMessages = (messages) => {
   );
 };
 
+const GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama-3.1-8b-instant',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768'
+];
+
 // Status check
 app.get('/api/status', (req, res) => {
   const apiKey = process.env.GROQ_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY;
@@ -66,10 +74,11 @@ app.post('/api/chat', async (req, res) => {
 
   let baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
   let model = 'gemini-2.0-flash';
+  let isGroq = false;
 
   if (apiKey.startsWith('gsk_')) {
     baseURL = 'https://api.groq.com/openai/v1';
-    model = process.env.DEFAULT_MODEL || 'llama3-70b-8192';
+    isGroq = true;
   } else if (apiKey.startsWith('sk-or-')) {
     baseURL = 'https://openrouter.ai/api/v1';
     model = 'openai/gpt-oss-20b';
@@ -92,6 +101,48 @@ app.post('/api/chat', async (req, res) => {
         'X-Title': 'Sabiondo AI'
       } : {}
     });
+
+    if (isGroq) {
+      const preferred = process.env.DEFAULT_MODEL;
+      const queue = preferred
+        ? [preferred, ...GROQ_MODELS.filter(m => m !== preferred)]
+        : GROQ_MODELS;
+
+      let stream = null;
+      let lastErr = null;
+      for (const groqModel of queue) {
+        try {
+          stream = await openai.chat.completions.create({
+            model: groqModel,
+            messages: safeMessages,
+            temperature: temp,
+            stream: true,
+            max_tokens: 2048
+          });
+          break;
+        } catch (err) {
+          const msg = err?.error?.message || err?.message || '';
+          if (msg.includes('decommissioned') || msg.includes('does not exist') || msg.includes('deprecated')) {
+            lastErr = err;
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!stream) {
+        throw lastErr || new Error('No Groq models available');
+      }
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        }
+      }
+      res.write(`data: [DONE]\n\n`);
+      return res.end();
+    }
 
     const stream = await openai.chat.completions.create({
       model,

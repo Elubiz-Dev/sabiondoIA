@@ -5,7 +5,15 @@ dotenv.config();
 
 export const config = { maxDuration: 30 };
 
-// Sanitize: strip null bytes and limit input size
+// Groq models in priority order (newest to oldest, fallback chain)
+const GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama-3.1-8b-instant',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768'
+];
+
 const sanitize = (str) => typeof str === 'string' ? str.replace(/\0/g, '').slice(0, 4000) : '';
 const validateMessages = (messages) => {
   if (!Array.isArray(messages)) return false;
@@ -17,12 +25,44 @@ const validateMessages = (messages) => {
   );
 };
 
+// Try Groq models in fallback order
+async function tryGroqWithFallback(openai, safeMessages, temp) {
+  const preferred = process.env.DEFAULT_MODEL;
+  const queue = preferred
+    ? [preferred, ...GROQ_MODELS.filter(m => m !== preferred)]
+    : GROQ_MODELS;
+
+  let lastError;
+  for (const model of queue) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model,
+        messages: safeMessages,
+        temperature: temp,
+        stream: false,
+        max_tokens: 2048
+      });
+      return { content: completion.choices[0]?.message?.content || '' };
+    } catch (err) {
+      const msg = err?.error?.message || err?.message || '';
+      const isModelError = msg.includes('decommissioned') ||
+                           msg.includes('does not exist') ||
+                           msg.includes('no longer supported') ||
+                           msg.includes('deprecated');
+      if (isModelError) {
+        lastError = err;
+        continue; // try next model
+      }
+      throw err; // auth/rate/network error — don't retry
+    }
+  }
+  throw lastError;
+}
+
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
-  // Security headers
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
 
@@ -31,18 +71,15 @@ export default async function handler(req, res) {
 
   const { messages, temperature = 0.7 } = req.body || {};
 
-  // Validate messages
   if (!validateMessages(messages)) {
     return res.status(400).json({ error: 'Mensajes inválidos o demasiado largos.' });
   }
 
-  // Validate temperature
   const temp = parseFloat(temperature);
   if (isNaN(temp) || temp < 0 || temp > 2) {
     return res.status(400).json({ error: 'Temperatura inválida.' });
   }
 
-  // API Key — prefer server key for security
   const serverKey = process.env.GROQ_API_KEY || process.env.API_KEY || process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY;
   const clientKey = sanitize(req.headers['x-api-key'] || '');
   const apiKey = serverKey?.trim() || clientKey;
@@ -53,16 +90,15 @@ export default async function handler(req, res) {
     });
   }
 
-  // Sanitize messages content
   const safeMessages = messages.map((m) => ({ role: m.role, content: sanitize(m.content) }));
 
-  // Detect provider
   let baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
   let model = 'gemini-2.0-flash';
+  let isGroq = false;
 
   if (apiKey.startsWith('gsk_')) {
     baseURL = 'https://api.groq.com/openai/v1';
-    model = process.env.DEFAULT_MODEL || 'llama3-70b-8192';
+    isGroq = true;
   } else if (apiKey.startsWith('sk-or-')) {
     baseURL = 'https://openrouter.ai/api/v1';
     model = 'openai/gpt-oss-20b';
@@ -81,6 +117,12 @@ export default async function handler(req, res) {
       } : {}
     });
 
+    if (isGroq) {
+      // Auto-fallback through available Groq models
+      const result = await tryGroqWithFallback(openai, safeMessages, temp);
+      return res.status(200).json(result);
+    }
+
     const completion = await openai.chat.completions.create({
       model,
       messages: safeMessages,
@@ -89,17 +131,15 @@ export default async function handler(req, res) {
       max_tokens: 2048
     });
 
-    const content = completion.choices[0]?.message?.content || '';
-    return res.status(200).json({ content });
+    return res.status(200).json({ content: completion.choices[0]?.message?.content || '' });
 
   } catch (error) {
     console.error('Error Sabiondo API:', error?.status, error?.message);
     const code = error?.status || 500;
-    const msg = error?.error?.message || error?.message || 'Error al comunicarse con la IA.';
-    // Don't leak internal error details in production
     const safeMsg = code === 429 ? 'Límite de solicitudes alcanzado. Espera un momento.' :
                     code === 401 ? 'API Key inválida o sin permisos.' :
-                    code >= 500 ? 'El servicio de IA no está disponible. Intenta de nuevo.' : msg;
+                    code >= 500 ? 'El servicio de IA no está disponible. Intenta de nuevo.' :
+                    (error?.error?.message || error?.message || 'Error al comunicarse con la IA.');
     return res.status(code > 499 ? 502 : code).json({ error: safeMsg });
   }
 }
