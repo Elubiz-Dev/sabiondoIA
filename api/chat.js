@@ -5,13 +5,13 @@ dotenv.config();
 
 export const config = { maxDuration: 30 };
 
-// Groq models in priority order (newest to oldest, fallback chain)
-const GROQ_MODELS = [
+// Preferred models in priority order
+const PREFERRED_GROQ_MODELS = [
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
   'llama-3.3-70b-versatile',
-  'llama-3.1-70b-versatile',
   'llama-3.1-8b-instant',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768'
+  'qwen/qwen3.8-27b'
 ];
 
 const sanitize = (str) => typeof str === 'string' ? str.replace(/\0/g, '').slice(0, 4000) : '';
@@ -25,15 +25,23 @@ const validateMessages = (messages) => {
   );
 };
 
-// Try Groq models in fallback order
-async function tryGroqWithFallback(openai, safeMessages, temp) {
-  const preferred = process.env.DEFAULT_MODEL;
-  const queue = preferred
-    ? [preferred, ...GROQ_MODELS.filter(m => m !== preferred)]
-    : GROQ_MODELS;
+// Dynamically select and call the best available Groq model
+async function callGroqWithAutoDiscovery(openai, safeMessages, temp) {
+  let modelQueue = [...PREFERRED_GROQ_MODELS];
+
+  try {
+    const list = await openai.models.list();
+    const available = new Set(list.data.map(m => m.id));
+    const activePreferred = PREFERRED_GROQ_MODELS.filter(m => available.has(m));
+    if (activePreferred.length > 0) {
+      modelQueue = activePreferred;
+    }
+  } catch (e) {
+    console.warn('No se pudo listar modelos de Groq dinámicamente, usando cola por defecto.');
+  }
 
   let lastError;
-  for (const model of queue) {
+  for (const model of modelQueue) {
     try {
       const completion = await openai.chat.completions.create({
         model,
@@ -45,18 +53,13 @@ async function tryGroqWithFallback(openai, safeMessages, temp) {
       return { content: completion.choices[0]?.message?.content || '' };
     } catch (err) {
       const msg = err?.error?.message || err?.message || '';
-      const isModelError = msg.includes('decommissioned') ||
-                           msg.includes('does not exist') ||
-                           msg.includes('no longer supported') ||
-                           msg.includes('deprecated');
-      if (isModelError) {
-        lastError = err;
-        continue; // try next model
-      }
-      throw err; // auth/rate/network error — don't retry
+      console.warn(`Modelo Groq ${model} falló:`, msg);
+      lastError = err;
+      // If it's a rate limit or decommissioning error, try next model
+      continue;
     }
   }
-  throw lastError;
+  throw lastError || new Error('No se pudo conectar con los modelos de Groq.');
 }
 
 export default async function handler(req, res) {
@@ -118,8 +121,7 @@ export default async function handler(req, res) {
     });
 
     if (isGroq) {
-      // Auto-fallback through available Groq models
-      const result = await tryGroqWithFallback(openai, safeMessages, temp);
+      const result = await callGroqWithAutoDiscovery(openai, safeMessages, temp);
       return res.status(200).json(result);
     }
 
@@ -138,7 +140,7 @@ export default async function handler(req, res) {
     const code = error?.status || 500;
     const safeMsg = code === 429 ? 'Límite de solicitudes alcanzado. Espera un momento.' :
                     code === 401 ? 'API Key inválida o sin permisos.' :
-                    code >= 500 ? 'El servicio de IA no está disponible. Intenta de nuevo.' :
+                    code >= 500 ? 'El servicio de IA no está disponible en este momento. Intenta de nuevo.' :
                     (error?.error?.message || error?.message || 'Error al comunicarse con la IA.');
     return res.status(code > 499 ? 502 : code).json({ error: safeMsg });
   }

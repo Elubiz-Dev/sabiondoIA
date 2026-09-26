@@ -10,11 +10,11 @@ const PORT = process.env.BACKEND_PORT || process.env.PORT || 3001;
 
 // Security: only allow localhost origins in development
 app.use(cors({
-  origin: (origin, cb) => cb(null, true), // local dev: allow all
+  origin: (origin, cb) => cb(null, true),
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'x-api-key']
 }));
-app.use(express.json({ limit: '1mb' })); // Reduced from 10mb — no need for huge payloads
+app.use(express.json({ limit: '1mb' }));
 
 // Sanitize: strip null bytes and limit size
 const sanitize = (str) => typeof str === 'string' ? str.replace(/\0/g, '').slice(0, 4000) : '';
@@ -28,12 +28,12 @@ const validateMessages = (messages) => {
   );
 };
 
-const GROQ_MODELS = [
+const PREFERRED_GROQ_MODELS = [
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
   'llama-3.3-70b-versatile',
-  'llama-3.1-70b-versatile',
   'llama-3.1-8b-instant',
-  'gemma2-9b-it',
-  'mixtral-8x7b-32768'
+  'qwen/qwen3.8-27b'
 ];
 
 // Status check
@@ -43,7 +43,7 @@ app.get('/api/status', (req, res) => {
   res.json({
     status: 'ok',
     hasServerKey,
-    defaultModel: process.env.DEFAULT_MODEL || 'llama-3.3-70b-versatile'
+    defaultModel: 'openai/gpt-oss-120b'
   });
 });
 
@@ -103,14 +103,19 @@ app.post('/api/chat', async (req, res) => {
     });
 
     if (isGroq) {
-      const preferred = process.env.DEFAULT_MODEL;
-      const queue = preferred
-        ? [preferred, ...GROQ_MODELS.filter(m => m !== preferred)]
-        : GROQ_MODELS;
+      let modelQueue = [...PREFERRED_GROQ_MODELS];
+      try {
+        const list = await openai.models.list();
+        const available = new Set(list.data.map(m => m.id));
+        const activePreferred = PREFERRED_GROQ_MODELS.filter(m => available.has(m));
+        if (activePreferred.length > 0) {
+          modelQueue = activePreferred;
+        }
+      } catch (e) {}
 
       let stream = null;
       let lastErr = null;
-      for (const groqModel of queue) {
+      for (const groqModel of modelQueue) {
         try {
           stream = await openai.chat.completions.create({
             model: groqModel,
@@ -121,12 +126,8 @@ app.post('/api/chat', async (req, res) => {
           });
           break;
         } catch (err) {
-          const msg = err?.error?.message || err?.message || '';
-          if (msg.includes('decommissioned') || msg.includes('does not exist') || msg.includes('deprecated')) {
-            lastErr = err;
-            continue;
-          }
-          throw err;
+          lastErr = err;
+          continue;
         }
       }
 
